@@ -5,11 +5,13 @@ import * as cheerio from "cheerio";
 
 const API = "https://salus-it500.com/public";
 
-// Email și parolă din Render → Environment Variables
 const SALUS_EMAIL = process.env.SALUS_EMAIL || "";
 const SALUS_PASSWORD = process.env.SALUS_PASSWORD || "";
 
-let PHPSESSID = ""; // cookie-ul de sesiune
+// ID-ul real al device-ului tău
+const DEVICE_ID = "33610733";
+
+let PHPSESSID = "";
 
 const app = express();
 app.use(cors());
@@ -20,17 +22,14 @@ app.use(express.json());
 async function salusLogin() {
     const loginPage = await fetch(`${API}/login.php`, {
         method: "GET",
-        headers: {
-            "User-Agent": "Mozilla/5.0",
-            "Accept": "text/html",
-        }
+        headers: { "User-Agent": "Mozilla/5.0" }
     });
 
     const setCookie = loginPage.headers.get("set-cookie") || "";
     const cookie = setCookie.split(";")[0];
 
     if (!cookie.includes("PHPSESSID")) {
-        throw new Error("Nu am primit cookie PHPSESSID de la Salus");
+        throw new Error("Nu am primit cookie PHPSESSID");
     }
 
     PHPSESSID = cookie;
@@ -50,77 +49,46 @@ async function salusLogin() {
     });
 
     const html = await loginResp.text();
-
     if (html.includes("Login failed") || html.includes("incorrect")) {
-        throw new Error("Login Salus eșuat — verifică email/parola");
+        throw new Error("Login Salus eșuat");
     }
 
     return true;
 }
 
-// ---------------- GET DEVICE LIST ----------------
+// ---------------- DEVICE PAGE ----------------
 
-async function getDeviceListHtml() {
-    const resp = await fetch(`${API}/devices.php`, {
+async function getControlPageHtml() {
+    const resp = await fetch(`${API}/control.php?devId=${DEVICE_ID}`, {
         method: "GET",
-        headers: {
-            "User-Agent": "Mozilla/5.0",
-            "Cookie": PHPSESSID
-        }
+        headers: { "User-Agent": "Mozilla/5.0", "Cookie": PHPSESSID }
     });
 
     return resp.text();
 }
 
-function extractDeviceIds(html: string) {
-    const $ = cheerio.load(html);
-    const ids: string[] = [];
-
-    $("div.deviceBox, div.device, img").each((i, el) => {
-        const id = $(el).attr("alt") || $(el).text();
-        if (id && id.trim().length > 5) {
-            ids.push(id.trim());
-        }
-    });
-
-    // fallback: extragem ID-ul din textul paginii
-    const text = $("body").text();
-    const matches = text.match(/STA\d+/g);
-    if (matches) ids.push(...matches);
-
-    return [...new Set(ids)];
-}
-
-// ---------------- GET DEVICE PAGE ----------------
-
-async function getDevicePageHtml(deviceId: string) {
-    const resp = await fetch(`${API}/device.php?id=${deviceId}`, {
-        method: "GET",
-        headers: {
-            "User-Agent": "Mozilla/5.0",
-            "Cookie": PHPSESSID
-        }
-    });
-
-    return resp.text();
-}
-
-// ---------------- PARSE DEVICE DATA ----------------
-
-function parseDevicePage(html: string) {
+function parseControlPage(html: string) {
     const $ = cheerio.load(html);
 
-    const temp = $("#temperature, .temperature, .temp").first().text().trim();
-    const setpoint = $("#setpoint, .setpoint").first().text().trim();
-    const mode = $("#mode, .mode").first().text().trim();
-    const status = $("#status, .status").first().text().trim();
+    // temperatura actuală
+    const tempText = $("body").text().match(/CURRENT TEMPERATURE:\s*([\d.]+)°C/);
+    const temp = tempText ? Number(tempText[1]) : null;
 
-    return {
-        temp: temp || null,
-        setpoint: setpoint || null,
-        mode: mode || null,
-        status: status || null
-    };
+    // setpoint (din tabel sau text)
+    const setpointText = $("body").text().match(/Program\s*\d+\s*\|\s*[\d:]+\s*\|\s*([\d.]+)°C/);
+    const setpoint = setpointText ? Number(setpointText[1]) : null;
+
+    // modul
+    let mode = null;
+    if (html.includes("AUTO")) mode = "AUTO";
+    if (html.includes("OFF")) mode = "OFF";
+
+    // status
+    let status = null;
+    if (html.includes("HEATING")) status = "HEATING";
+    if (html.includes("OFF")) status = "OFF";
+
+    return { temp, setpoint, mode, status };
 }
 
 // ---------------- ROUTES ----------------
@@ -136,29 +104,15 @@ app.post("/salus/login", async (req, res) => {
 
 app.get("/salus/data", async (req, res) => {
     try {
-        const listHtml = await getDeviceListHtml();
+        const html = await getControlPageHtml();
 
-        if (req.query.debug === "1") {
-            return res.send(listHtml);
-        }
+        if (req.query.debug === "1") return res.send(html);
 
-        const ids = extractDeviceIds(listHtml);
-        if (ids.length === 0) {
-            return res.json({ status: "ok", data: [], message: "Niciun device găsit" });
-        }
-
-        const deviceId = ids[0]; // primul device
-        const deviceHtml = await getDevicePageHtml(deviceId);
-
-        if (req.query.debug === "2") {
-            return res.send(deviceHtml);
-        }
-
-        const data = parseDevicePage(deviceHtml);
+        const data = parseControlPage(html);
 
         res.json({
             status: "ok",
-            deviceId,
+            deviceId: DEVICE_ID,
             data
         });
 
