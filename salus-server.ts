@@ -29,7 +29,6 @@ function getCookieHeader() {
 // ---------------- LOGIN + TOKEN ----------------
 
 async function salusLogin(): Promise<void> {
-  // 1. GET login.php → luăm PHPSESSID
   const loginPage = await fetch(`${API_PUBLIC}/login.php`, {
     method: "GET",
     headers: {
@@ -50,10 +49,9 @@ async function salusLogin(): Promise<void> {
 
   PHPSESSID = cookie;
 
-  // 2. POST login.php → autentificare
   const body = new URLSearchParams();
   body.append("IDemail", SALUS_EMAIL);
-  body.append("password", SALUS_PASSWORD); // <-- corect
+  body.append("password", SALUS_PASSWORD);
   body.append("login", "Login");
   body.append("keep_logged_in", "1");
 
@@ -136,31 +134,44 @@ async function fetchControlPageWithToken(): Promise<string> {
   return resp.text();
 }
 
-// ---------------- PARSER (FINAL, ROBUST) ----------------
+// ---------------- PARSER (status stabil) ----------------
 
 function parseZones(html: string) {
   const $ = cheerio.load(html);
-  const raw = $("body").text().toLowerCase();
+
+  // normalizăm textul ca să putem căuta expresii
+  const raw = $("body").text().toLowerCase().replace(/\s+/g, " ");
 
   // ZONA 1
   const z1Temp = Number($("#current_room_tempZ1").text().trim()) || null;
   const z1Setpoint = Number($("#current_tempZ1").text().trim()) || null;
 
-  let z1Status = null;
-  if (raw.includes("zone 1") && raw.includes("heating")) z1Status = "HEATING";
-  if (raw.includes("zone 1") && raw.includes("off")) z1Status = "OFF";
+  let z1Status: string | null = null;
 
-  let z1Mode = null;
-  if (raw.includes("auto")) z1Mode = "AUTO";
-  if (raw.includes("manual")) z1Mode = "MANUAL";
+  if (raw.includes("zone 1 is on") || raw.includes("heating zone 1")) {
+    z1Status = "HEATING";
+  } else if (raw.includes("zone 1 is off") || raw.includes("off zone 1")) {
+    z1Status = "OFF";
+  }
+
+  let z1Mode: string | null = null;
+  if (raw.includes(" auto ")) {
+    z1Mode = "AUTO";
+  } else if (raw.includes(" manual ")) {
+    z1Mode = "MANUAL";
+  }
 
   // ZONA 2
   const z2Temp = Number($("#current_room_tempZ2").text().trim()) || null;
   const z2Setpoint = Number($("#current_tempZ2").text().trim()) || null;
 
-  let z2Status = null;
-  if (raw.includes("zone 2") && raw.includes("heating")) z2Status = "HEATING";
-  if (raw.includes("zone 2") && raw.includes("off")) z2Status = "OFF";
+  let z2Status: string | null = null;
+
+  if (raw.includes("zone 2 is on") || raw.includes("heating zone 2")) {
+    z2Status = "HEATING";
+  } else if (raw.includes("zone 2 is off") || raw.includes("off zone 2")) {
+    z2Status = "OFF";
+  }
 
   return {
     zone1: {
