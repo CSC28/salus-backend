@@ -147,7 +147,7 @@ function parseZones(html: string) {
 
   let z1Status: string | null = null;
   if (raw.includes("zone 1 is on")) z1Status = "HEATING";
-  else if (raw.includes("zone 1 is off")) z1Status = "OFF";
+  else z1Status = "OFF";
 
   // ZONA 2
   const z2Temp = Number($("#current_room_tempZ2").text().trim()) || null;
@@ -155,7 +155,7 @@ function parseZones(html: string) {
 
   let z2Status: string | null = null;
   if (raw.includes("zone 2 is on")) z2Status = "HEATING";
-  else if (raw.includes("zone 2 is off")) z2Status = "OFF";
+  else z2Status = "OFF";
 
   return {
     zone1: {
