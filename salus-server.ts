@@ -134,12 +134,11 @@ async function fetchControlPageWithToken(): Promise<string> {
   return resp.text();
 }
 
-// ---------------- PARSER (status stabil) ----------------
+// ---------------- PARSER (FINAL, 100% COMPATIBIL CU PAGINA TA) ----------------
 
 function parseZones(html: string) {
   const $ = cheerio.load(html);
 
-  // normalizăm textul ca să putem căuta expresii
   const raw = $("body").text().toLowerCase().replace(/\s+/g, " ");
 
   // ZONA 1
@@ -147,37 +146,22 @@ function parseZones(html: string) {
   const z1Setpoint = Number($("#current_tempZ1").text().trim()) || null;
 
   let z1Status: string | null = null;
-
-  if (raw.includes("zone 1 is on") || raw.includes("heating zone 1")) {
-    z1Status = "HEATING";
-  } else if (raw.includes("zone 1 is off") || raw.includes("off zone 1")) {
-    z1Status = "OFF";
-  }
-
-  let z1Mode: string | null = null;
-  if (raw.includes(" auto ")) {
-    z1Mode = "AUTO";
-  } else if (raw.includes(" manual ")) {
-    z1Mode = "MANUAL";
-  }
+  if (raw.includes("zone 1 is on")) z1Status = "HEATING";
+  else if (raw.includes("zone 1 is off")) z1Status = "OFF";
 
   // ZONA 2
   const z2Temp = Number($("#current_room_tempZ2").text().trim()) || null;
   const z2Setpoint = Number($("#current_tempZ2").text().trim()) || null;
 
   let z2Status: string | null = null;
-
-  if (raw.includes("zone 2 is on") || raw.includes("heating zone 2")) {
-    z2Status = "HEATING";
-  } else if (raw.includes("zone 2 is off") || raw.includes("off zone 2")) {
-    z2Status = "OFF";
-  }
+  if (raw.includes("zone 2 is on")) z2Status = "HEATING";
+  else if (raw.includes("zone 2 is off")) z2Status = "OFF";
 
   return {
     zone1: {
       temp: z1Temp,
       setpoint: z1Setpoint,
-      mode: z1Mode,
+      mode: null,
       status: z1Status,
     },
     zone2: {
