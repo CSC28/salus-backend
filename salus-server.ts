@@ -17,7 +17,7 @@ app.use(cors());
 app.use(express.json());
 
 async function salusLogin(): Promise<{ session: string; cookies: string }> {
-  // 1️⃣ Preluăm pagina de login pentru a extrage token-ul CSRF + cookie PHPSESSID
+  // 1️⃣ GET pagina de login pentru cookie PHPSESSID
   const loginPage = await fetch(`${API}/login.php`, {
     method: "GET",
     headers: {
@@ -36,23 +36,14 @@ async function salusLogin(): Promise<{ session: string; cookies: string }> {
   console.log(html);
   console.log("=== RAW LOGIN PAGE END ===");
 
-  const $ = cheerio.load(html);
-
-  // 2️⃣ Extragem token-ul CSRF (dacă există)
-  const csrf = $('input[name="token"]').attr("value") || "";
-
-  if (!csrf) {
-    throw new Error("Nu am găsit token CSRF în pagina de login");
-  }
-
-  // 3️⃣ Trimitem login-ul real, exact ca browserul
+  // 2️⃣ Construim body-ul corect (fără token!)
   const body = new URLSearchParams();
-  body.append("email", SALUS_EMAIL);
+  body.append("IDemail", SALUS_EMAIL);
   body.append("password", SALUS_PASSWORD);
   body.append("keep_logged_in", "1");
   body.append("login", "Login");
-  body.append("token", csrf);
 
+  // 3️⃣ POST login
   const loginRes = await fetch(`${API}/login.php`, {
     method: "POST",
     headers: {
@@ -67,17 +58,17 @@ async function salusLogin(): Promise<{ session: string; cookies: string }> {
   const cookies2 = loginRes.headers.get("set-cookie") || "";
   const finalCookie = cookies2.split(";")[0] || cookie;
 
-  // 4️⃣ Verificăm dacă login-ul a reușit
-  if (loginRes.status === 302) {
-    const location = loginRes.headers.get("location") || "";
-    if (!location.includes("devices.php")) {
-      throw new Error("Login Salus nereușit (redirect greșit)");
-    }
-  } else {
+  // 4️⃣ Verificăm redirect-ul
+  if (loginRes.status !== 302) {
     throw new Error("Login Salus nereușit (status != 302)");
   }
 
-  // 5️⃣ Preluăm sesiunea reală
+  const location = loginRes.headers.get("location") || "";
+  if (!location.includes("devices.php")) {
+    throw new Error("Login Salus nereușit (redirect greșit)");
+  }
+
+  // 5️⃣ Extragem sesiunea
   const sessionMatch = finalCookie.match(/PHPSESSID=([^;]+)/);
   if (!sessionMatch) {
     throw new Error("Nu am găsit sesiunea PHPSESSID");
