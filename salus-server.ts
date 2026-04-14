@@ -4,17 +4,21 @@ import fetch from "node-fetch";
 import * as cheerio from "cheerio";
 
 const API = "https://salus-it500.com/public";
-const SALUS_EMAIL = process.env.SALUS_EMAIL || "EMAIL_TAU";
-const SALUS_PASSWORD = process.env.SALUS_PASSWORD || "PAROLA_TA";
 
-let PHPSESSID = ""; // cookie-ul salvat după login
+// IMPORTANT: setează emailul și parola în Render → Environment Variables
+const SALUS_EMAIL = process.env.SALUS_EMAIL || "";
+const SALUS_PASSWORD = process.env.SALUS_PASSWORD || "";
+
+let PHPSESSID = ""; // cookie-ul de sesiune
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ---------------- LOGIN ----------------
+
 async function salusLogin() {
-    // 1. GET pagina de login pentru a obține cookie-ul PHPSESSID
+    // 1. GET login page → obținem cookie PHPSESSID
     const loginPage = await fetch(`${API}/login.php`, {
         method: "GET",
         headers: {
@@ -56,6 +60,8 @@ async function salusLogin() {
     return true;
 }
 
+// ---------------- GET DATA ----------------
+
 async function getSalusData() {
     if (!PHPSESSID) {
         throw new Error("Nu există sesiune activă — trebuie login");
@@ -72,7 +78,6 @@ async function getSalusData() {
     const html = await resp.text();
     const $ = cheerio.load(html);
 
-    // extragem datele din pagina Salus
     const devices: any[] = [];
 
     $("table.deviceTable tr").each((i, row) => {
@@ -90,7 +95,7 @@ async function getSalusData() {
     return devices;
 }
 
-// --------------------- ROUTE-URI HTTP ---------------------
+// ---------------- ROUTES ----------------
 
 app.post("/salus/login", async (req, res) => {
     try {
@@ -110,11 +115,10 @@ app.get("/salus/data", async (req, res) => {
     }
 });
 
-// --------------------- PORNIRE SERVER ---------------------
+// ---------------- SERVER ----------------
 
 const PORT = Number(process.env.PORT) || 3001;
 
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`Salus backend running on port ${PORT}`);
 });
-
