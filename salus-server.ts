@@ -1,186 +1,118 @@
-import expressPkg from "express";
-const express = expressPkg;
-type Request = expressPkg.Request;
-type Response = expressPkg.Response;
-
+import express from "express";
 import cors from "cors";
 import fetch from "node-fetch";
 import * as cheerio from "cheerio";
 
 const API = "https://salus-it500.com/public";
+const SALUS_EMAIL = process.env.SALUS_EMAIL || "EMAIL_TAU";
+const SALUS_PASSWORD = process.env.SALUS_PASSWORD || "PAROLA_TA";
 
-const SALUS_EMAIL = "samuelcristian18@gmail.com";
-const SALUS_PASSWORD = "Parolatermostat1";
+let PHPSESSID = ""; // cookie-ul salvat după login
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-async function salusLogin(): Promise<{ session: string; cookies: string }> {
-  // 1️⃣ GET pagina de login pentru cookie PHPSESSID
-  const loginPage = await fetch(`${API}/login.php`, {
-    method: "GET",
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-      "Accept":
-        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Referer": "https://salus-it500.com/public/login.php",
-      "Upgrade-Insecure-Requests": "1",
-      "Sec-Fetch-Dest": "document",
-      "Sec-Fetch-Mode": "navigate",
-      "Sec-Fetch-Site": "same-origin",
-      "Sec-Fetch-User": "?1",
-    },
-  });
-
-  const setCookie = loginPage.headers.get("set-cookie") || "";
-  const cookie = setCookie.split(";")[0];
-
-  const html = await loginPage.text();
-
-  console.log("=== RAW LOGIN PAGE START ===");
-  console.log(html);
-  console.log("=== RAW LOGIN PAGE END ===");
-
-  if (!cookie.includes("PHPSESSID")) {
-    throw new Error(
-      "Serverul Salus NU a trimis cookie PHPSESSID — IP-ul Render este blocat sau lipsesc header-ele corecte"
-    );
-  }
-
-  // 2️⃣ Body corect (fără token)
-  const body = new URLSearchParams();
-  body.append("IDemail", SALUS_EMAIL);
-  body.append("password", SALUS_PASSWORD);
-  body.append("keep_logged_in", "1");
-  body.append("login", "Login");
-
-  // 3️⃣ POST login
-  const loginRes = await fetch(`${API}/login.php`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "Cookie": cookie,
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-      "Accept": "*/*",
-      "Referer": "https://salus-it500.com/public/login.php",
-      "Origin": "https://salus-it500.com",
-    },
-    body,
-    redirect: "manual",
-  });
-
-  const cookies2 = loginRes.headers.get("set-cookie") || "";
-  const finalCookie = cookies2.split(";")[0] || cookie;
-
-  if (loginRes.status !== 302) {
-    throw new Error("Login Salus nereușit (status != 302)");
-  }
-
-  const location = loginRes.headers.get("location") || "";
-  if (!location.includes("devices.php")) {
-    throw new Error("Login Salus nereușit (redirect greșit)");
-  }
-
-  const sessionMatch = finalCookie.match(/PHPSESSID=([^;]+)/);
-  if (!sessionMatch) {
-    throw new Error("Nu am găsit sesiunea PHPSESSID");
-  }
-
-  return {
-    session: sessionMatch[1],
-    cookies: finalCookie,
-  };
-}
-
-async function salusGetData() {
-  const { session, cookies } = await salusLogin();
-
-  const res = await fetch(`${API}/getdata.php?session=${session}`, {
-    headers: {
-      "Cookie": cookies,
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-    },
-  });
-
-  const raw = await res.text();
-
-  try {
-    return JSON.parse(raw);
-  } catch {
-    throw new Error("Salus a returnat NON-JSON la getdata");
-  }
-}
-
-app.get("/salus/data", async (req: Request, res: Response) => {
-  try {
-    const data = await salusGetData();
-
-    res.json({
-      currentTemp: data.temp,
-      setTemp: data.setTemp,
-      heatingOn: data.heatOn === 1,
-      mode: data.mode,
+async function salusLogin() {
+    // 1. GET pagina de login pentru a obține cookie-ul PHPSESSID
+    const loginPage = await fetch(`${API}/login.php`, {
+        method: "GET",
+        headers: {
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "text/html",
+        }
     });
-  } catch (err) {
-    console.error("Eroare /salus/data:", err);
-    res.status(500).json({ error: "Failed to fetch Salus data" });
-  }
-});
 
-app.post("/salus/settemp", async (req: Request, res: Response) => {
-  try {
-    const { temp } = req.body;
-    if (typeof temp !== "number") {
-      return res.status(400).json({ error: "temp must be a number" });
+    const setCookie = loginPage.headers.get("set-cookie") || "";
+    const cookie = setCookie.split(";")[0];
+
+    if (!cookie.includes("PHPSESSID")) {
+        throw new Error("Nu am primit cookie PHPSESSID de la Salus");
     }
 
-    const { session, cookies } = await salusLogin();
+    PHPSESSID = cookie;
 
-    await fetch(`${API}/settemp.php?session=${session}&temp=${temp}`, {
-      headers: {
-        "Cookie": cookies,
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-      },
+    // 2. POST login cu email + parolă
+    const body = new URLSearchParams();
+    body.append("IDemail", SALUS_EMAIL);
+    body.append("Password", SALUS_PASSWORD);
+
+    const loginResp = await fetch(`${API}/login.php`, {
+        method: "POST",
+        headers: {
+            "User-Agent": "Mozilla/5.0",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Cookie": PHPSESSID
+        },
+        body
     });
 
-    res.json({ success: true });
-  } catch (err) {
-    console.error("Eroare /salus/settemp:", err);
-    res.status(500).json({ error: "Failed to set temperature" });
-  }
-});
+    const html = await loginResp.text();
 
-app.post("/salus/setmode", async (req: Request, res: Response) => {
-  try {
-    const { mode } = req.body;
-    if (!["auto", "manual", "off"].includes(mode)) {
-      return res.status(400).json({ error: "invalid mode" });
+    if (html.includes("Login failed") || html.includes("incorrect")) {
+        throw new Error("Login Salus eșuat — verifică email/parola");
     }
 
-    const { session, cookies } = await salusLogin();
+    return true;
+}
 
-    await fetch(`${API}/setmode.php?session=${session}&mode=${mode}`, {
-      headers: {
-        "Cookie": cookies,
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-      },
+async function getSalusData() {
+    if (!PHPSESSID) {
+        throw new Error("Nu există sesiune activă — trebuie login");
+    }
+
+    const resp = await fetch(`${API}/devices.php`, {
+        method: "GET",
+        headers: {
+            "User-Agent": "Mozilla/5.0",
+            "Cookie": PHPSESSID
+        }
     });
 
-    res.json({ success: true });
-  } catch (err) {
-    console.error("Eroare /salus/setmode:", err);
-    res.status(500).json({ error: "Failed to set mode" });
-  }
+    const html = await resp.text();
+    const $ = cheerio.load(html);
+
+    // extragem datele din pagina Salus
+    const devices: any[] = [];
+
+    $("table.deviceTable tr").each((i, row) => {
+        const cols = $(row).find("td");
+        if (cols.length > 0) {
+            devices.push({
+                name: $(cols[0]).text().trim(),
+                temp: $(cols[1]).text().trim(),
+                setpoint: $(cols[2]).text().trim(),
+                mode: $(cols[3]).text().trim()
+            });
+        }
+    });
+
+    return devices;
+}
+
+// --------------------- ROUTE-URI HTTP ---------------------
+
+app.post("/salus/login", async (req, res) => {
+    try {
+        await salusLogin();
+        res.json({ status: "ok", message: "Logged in" });
+    } catch (err: any) {
+        res.status(500).json({ status: "error", message: err.message });
+    }
 });
+
+app.get("/salus/data", async (req, res) => {
+    try {
+        const data = await getSalusData();
+        res.json({ status: "ok", data });
+    } catch (err: any) {
+        res.status(500).json({ status: "error", message: err.message });
+    }
+});
+
+// --------------------- PORNIRE SERVER ---------------------
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log("🟢 Salus backend running on port", PORT);
+app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Salus backend running on port ${PORT}`);
 });
