@@ -56,7 +56,18 @@ async function salusLogin() {
     return true;
 }
 
-// ---------------- DEVICE PAGE ----------------
+// ---------------- DEVICE LIST ----------------
+
+async function getDeviceListHtml() {
+    const resp = await fetch(`${API}/devices.php`, {
+        method: "GET",
+        headers: { "User-Agent": "Mozilla/5.0", "Cookie": PHPSESSID }
+    });
+
+    return resp.text();
+}
+
+// ---------------- CONTROL PAGE ----------------
 
 async function getControlPageHtml() {
     const resp = await fetch(`${API}/control.php?devId=${DEVICE_ID}`, {
@@ -67,16 +78,18 @@ async function getControlPageHtml() {
     return resp.text();
 }
 
+// ---------------- PARSER ----------------
+
 function parseControlPage(html: string) {
     const $ = cheerio.load(html);
 
     // temperatura actuală
-    const tempText = $("body").text().match(/CURRENT TEMPERATURE:\s*([\d.]+)°C/);
-    const temp = tempText ? Number(tempText[1]) : null;
+    const tempMatch = html.match(/CURRENT TEMPERATURE:\s*([\d.]+)°C/);
+    const temp = tempMatch ? Number(tempMatch[1]) : null;
 
-    // setpoint (din tabel sau text)
-    const setpointText = $("body").text().match(/Program\s*\d+\s*\|\s*[\d:]+\s*\|\s*([\d.]+)°C/);
-    const setpoint = setpointText ? Number(setpointText[1]) : null;
+    // setpoint (din tabel)
+    const setMatch = html.match(/\|\s*([\d.]+)°C/);
+    const setpoint = setMatch ? Number(setMatch[1]) : null;
 
     // modul
     let mode = null;
@@ -104,10 +117,20 @@ app.post("/salus/login", async (req, res) => {
 
 app.get("/salus/data", async (req, res) => {
     try {
+        // DEBUG 1 → devices.php
+        if (req.query.debug === "1") {
+            const html = await getDeviceListHtml();
+            return res.send(html);
+        }
+
+        // DEBUG 2 → control.php
+        if (req.query.debug === "2") {
+            const html = await getControlPageHtml();
+            return res.send(html);
+        }
+
+        // Normal mode
         const html = await getControlPageHtml();
-
-        if (req.query.debug === "1") return res.send(html);
-
         const data = parseControlPage(html);
 
         res.json({
