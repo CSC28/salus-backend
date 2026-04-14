@@ -112,7 +112,9 @@ app.get("/salus/data", async (req, res) => {
 
 // --------------------- PORNIRE SERVER ---------------------
 
-const PORT = process.env.PORT || 3001;
+const PORT = Number(process.env.PORT) || 3001;
+
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`Salus backend running on port ${PORT}`);
 });
+
