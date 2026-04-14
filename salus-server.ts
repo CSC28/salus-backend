@@ -18,7 +18,6 @@ app.use(express.json());
 // ---------------- LOGIN ----------------
 
 async function salusLogin() {
-    // 1. GET login page → obținem cookie PHPSESSID
     const loginPage = await fetch(`${API}/login.php`, {
         method: "GET",
         headers: {
@@ -36,7 +35,6 @@ async function salusLogin() {
 
     PHPSESSID = cookie;
 
-    // 2. POST login cu email + parolă
     const body = new URLSearchParams();
     body.append("IDemail", SALUS_EMAIL);
     body.append("Password", SALUS_PASSWORD);
@@ -60,9 +58,9 @@ async function salusLogin() {
     return true;
 }
 
-// ---------------- RAW HTML ----------------
+// ---------------- GET DEVICE LIST ----------------
 
-async function getSalusRawHtml() {
+async function getDeviceListHtml() {
     const resp = await fetch(`${API}/devices.php`, {
         method: "GET",
         headers: {
@@ -74,26 +72,55 @@ async function getSalusRawHtml() {
     return resp.text();
 }
 
-// ---------------- PARSER ----------------
-
-function parseSalusHtml(html: string) {
+function extractDeviceIds(html: string) {
     const $ = cheerio.load(html);
-    const devices: any[] = [];
+    const ids: string[] = [];
 
-    // Layout vechi (tabel)
-    $("table.deviceTable tr").each((i, row) => {
-        const cols = $(row).find("td");
-        if (cols.length > 0) {
-            devices.push({
-                name: $(cols[0]).text().trim(),
-                temp: $(cols[1]).text().trim(),
-                setpoint: $(cols[2]).text().trim(),
-                mode: $(cols[3]).text().trim()
-            });
+    $("div.deviceBox, div.device, img").each((i, el) => {
+        const id = $(el).attr("alt") || $(el).text();
+        if (id && id.trim().length > 5) {
+            ids.push(id.trim());
         }
     });
 
-    return devices;
+    // fallback: extragem ID-ul din textul paginii
+    const text = $("body").text();
+    const matches = text.match(/STA\d+/g);
+    if (matches) ids.push(...matches);
+
+    return [...new Set(ids)];
+}
+
+// ---------------- GET DEVICE PAGE ----------------
+
+async function getDevicePageHtml(deviceId: string) {
+    const resp = await fetch(`${API}/device.php?id=${deviceId}`, {
+        method: "GET",
+        headers: {
+            "User-Agent": "Mozilla/5.0",
+            "Cookie": PHPSESSID
+        }
+    });
+
+    return resp.text();
+}
+
+// ---------------- PARSE DEVICE DATA ----------------
+
+function parseDevicePage(html: string) {
+    const $ = cheerio.load(html);
+
+    const temp = $("#temperature, .temperature, .temp").first().text().trim();
+    const setpoint = $("#setpoint, .setpoint").first().text().trim();
+    const mode = $("#mode, .mode").first().text().trim();
+    const status = $("#status, .status").first().text().trim();
+
+    return {
+        temp: temp || null,
+        setpoint: setpoint || null,
+        mode: mode || null,
+        status: status || null
+    };
 }
 
 // ---------------- ROUTES ----------------
@@ -109,15 +136,32 @@ app.post("/salus/login", async (req, res) => {
 
 app.get("/salus/data", async (req, res) => {
     try {
-        const html = await getSalusRawHtml();
+        const listHtml = await getDeviceListHtml();
 
-        // DEBUG MODE → returnăm HTML brut
         if (req.query.debug === "1") {
-            return res.send(html);
+            return res.send(listHtml);
         }
 
-        const devices = parseSalusHtml(html);
-        res.json({ status: "ok", data: devices });
+        const ids = extractDeviceIds(listHtml);
+        if (ids.length === 0) {
+            return res.json({ status: "ok", data: [], message: "Niciun device găsit" });
+        }
+
+        const deviceId = ids[0]; // primul device
+        const deviceHtml = await getDevicePageHtml(deviceId);
+
+        if (req.query.debug === "2") {
+            return res.send(deviceHtml);
+        }
+
+        const data = parseDevicePage(deviceHtml);
+
+        res.json({
+            status: "ok",
+            deviceId,
+            data
+        });
+
     } catch (err: any) {
         res.status(500).json({ status: "error", message: err.message });
     }
