@@ -22,6 +22,7 @@ async function salusLogin(): Promise<{ session: string; cookies: string }> {
     method: "GET",
     headers: {
       "User-Agent": "Mozilla/5.0",
+      "Accept": "text/html",
     },
   });
 
@@ -29,15 +30,22 @@ async function salusLogin(): Promise<{ session: string; cookies: string }> {
   const cookie = setCookie.split(";")[0];
 
   const html = await loginPage.text();
+
+  // 🔥 LOG COMPLET AL PAGINII DE LOGIN — AICI VEDEM CE TRIMITE SALUS
+  console.log("=== RAW LOGIN PAGE START ===");
+  console.log(html);
+  console.log("=== RAW LOGIN PAGE END ===");
+
   const $ = cheerio.load(html);
 
+  // 2️⃣ Extragem token-ul CSRF (dacă există)
   const csrf = $('input[name="token"]').attr("value") || "";
 
   if (!csrf) {
     throw new Error("Nu am găsit token CSRF în pagina de login");
   }
 
-  // 2️⃣ Trimitem login-ul real, exact ca browserul
+  // 3️⃣ Trimitem login-ul real, exact ca browserul
   const body = new URLSearchParams();
   body.append("email", SALUS_EMAIL);
   body.append("password", SALUS_PASSWORD);
@@ -59,7 +67,7 @@ async function salusLogin(): Promise<{ session: string; cookies: string }> {
   const cookies2 = loginRes.headers.get("set-cookie") || "";
   const finalCookie = cookies2.split(";")[0] || cookie;
 
-  // 3️⃣ Verificăm dacă login-ul a reușit
+  // 4️⃣ Verificăm dacă login-ul a reușit
   if (loginRes.status === 302) {
     const location = loginRes.headers.get("location") || "";
     if (!location.includes("devices.php")) {
@@ -69,7 +77,7 @@ async function salusLogin(): Promise<{ session: string; cookies: string }> {
     throw new Error("Login Salus nereușit (status != 302)");
   }
 
-  // 4️⃣ Preluăm sesiunea reală
+  // 5️⃣ Preluăm sesiunea reală
   const sessionMatch = finalCookie.match(/PHPSESSID=([^;]+)/);
   if (!sessionMatch) {
     throw new Error("Nu am găsit sesiunea PHPSESSID");
