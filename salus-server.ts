@@ -136,39 +136,31 @@ async function fetchControlPageWithToken(): Promise<string> {
   return resp.text();
 }
 
-// ---------------- PARSER (REPARAT) ----------------
+// ---------------- PARSER (FINAL, ROBUST) ----------------
 
 function parseZones(html: string) {
   const $ = cheerio.load(html);
-  const raw = $("body").text().toUpperCase();
+  const raw = $("body").text().toLowerCase();
 
   // ZONA 1
   const z1Temp = Number($("#current_room_tempZ1").text().trim()) || null;
   const z1Setpoint = Number($("#current_tempZ1").text().trim()) || null;
 
-  const z1Status =
-    raw.includes("ZONE 1") && raw.includes("HEATING")
-      ? "HEATING"
-      : raw.includes("ZONE 1") && raw.includes("OFF")
-      ? "OFF"
-      : null;
+  let z1Status = null;
+  if (raw.includes("zone 1") && raw.includes("heating")) z1Status = "HEATING";
+  if (raw.includes("zone 1") && raw.includes("off")) z1Status = "OFF";
 
-  const z1Mode = raw.includes("AUTO")
-    ? "AUTO"
-    : raw.includes("MANUAL")
-    ? "MANUAL"
-    : null;
+  let z1Mode = null;
+  if (raw.includes("auto")) z1Mode = "AUTO";
+  if (raw.includes("manual")) z1Mode = "MANUAL";
 
   // ZONA 2
   const z2Temp = Number($("#current_room_tempZ2").text().trim()) || null;
   const z2Setpoint = Number($("#current_tempZ2").text().trim()) || null;
 
-  const z2Status =
-    raw.includes("ZONE 2") && raw.includes("HEATING")
-      ? "HEATING"
-      : raw.includes("ZONE 2") && raw.includes("OFF")
-      ? "OFF"
-      : null;
+  let z2Status = null;
+  if (raw.includes("zone 2") && raw.includes("heating")) z2Status = "HEATING";
+  if (raw.includes("zone 2") && raw.includes("off")) z2Status = "OFF";
 
   return {
     zone1: {
