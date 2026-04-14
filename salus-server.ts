@@ -53,7 +53,9 @@ async function salusLogin(): Promise<void> {
   // 2. POST login.php → autentificare
   const body = new URLSearchParams();
   body.append("IDemail", SALUS_EMAIL);
-  body.append("password", SALUS_PASSWORD);
+  body.append("password", SALUS_PASSWORD); // <-- AICI ERA PROBLEMA
+  body.append("login", "Login");
+  body.append("keep_logged_in", "1");
 
   const loginResp = await fetch(`${API_PUBLIC}/login.php`, {
     method: "POST",
@@ -72,7 +74,7 @@ async function salusLogin(): Promise<void> {
   const html = await loginResp.text();
 
   // dacă tot pagina de login vine înapoi, înseamnă că nu te-a autentificat
-  if (html.includes("IDemail") && html.includes("Password")) {
+  if (html.includes("IDemail") && html.includes("password")) {
     throw new Error("Login Salus eșuat — pagina de login a fost returnată din nou");
   }
 
@@ -140,7 +142,6 @@ async function fetchControlPageWithToken(): Promise<string> {
 function parseZones(html: string) {
   const $ = cheerio.load(html);
 
-  // ZONA 1 (iT500)
   const z1TempText = $("#current_room_tempZ1").text().trim();
   const z1SetpointText = $("#current_tempZ1").text().trim();
   const z1Temp = z1TempText ? Number(z1TempText) : null;
@@ -155,7 +156,6 @@ function parseZones(html: string) {
   if (z1ModeText.includes("AUTO")) z1Mode = "AUTO";
   if (z1ModeText.includes("MANUAL")) z1Mode = "MANUAL";
 
-  // ZONA 2 (iT300)
   const z2TempText = $("#current_room_tempZ2").text().trim();
   const z2SetpointText = $("#current_tempZ2").text().trim();
   const z2Temp = z2TempText ? Number(z2TempText) : null;
@@ -188,7 +188,7 @@ function parseZones(html: string) {
   };
 }
 
-// ---------------- CONTROL (set.php) ----------------
+// ---------------- CONTROL ----------------
 
 async function sendSetCommand(set_f: string, value: string): Promise<void> {
   await ensureLoggedInAndToken();
