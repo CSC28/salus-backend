@@ -53,7 +53,7 @@ async function salusLogin(): Promise<void> {
   // 2. POST login.php → autentificare
   const body = new URLSearchParams();
   body.append("IDemail", SALUS_EMAIL);
-  body.append("Password", SALUS_PASSWORD);
+  body.append("password", SALUS_PASSWORD);
 
   const loginResp = await fetch(`${API_PUBLIC}/login.php`, {
     method: "POST",
