@@ -34,6 +34,10 @@ async function salusLogin(): Promise<void> {
     method: "GET",
     headers: {
       "User-Agent": "Mozilla/5.0",
+      "Accept": "text/html,application/xhtml+xml",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Referer": "https://salus-it500.com/public/login.php",
+      "Origin": "https://salus-it500.com",
     },
   });
 
@@ -56,17 +60,23 @@ async function salusLogin(): Promise<void> {
     headers: {
       "User-Agent": "Mozilla/5.0",
       "Content-Type": "application/x-www-form-urlencoded",
-      ...getCookieHeader(),
+      "Accept": "text/html,application/xhtml+xml",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Referer": "https://salus-it500.com/public/login.php",
+      "Origin": "https://salus-it500.com",
+      Cookie: PHPSESSID,
     },
     body,
   });
 
   const html = await loginResp.text();
-  if (html.includes("Login failed") || html.includes("incorrect")) {
-    throw new Error("Login Salus eșuat (verifică email/parolă)");
+
+  // dacă tot pagina de login vine înapoi, înseamnă că nu te-a autentificat
+  if (html.includes("IDemail") && html.includes("Password")) {
+    throw new Error("Login Salus eșuat — pagina de login a fost returnată din nou");
   }
 
-  TOKEN = null; // forțăm re-obținerea token-ului
+  TOKEN = null;
 }
 
 async function fetchControlPageRaw(): Promise<string> {
@@ -74,6 +84,10 @@ async function fetchControlPageRaw(): Promise<string> {
     method: "GET",
     headers: {
       "User-Agent": "Mozilla/5.0",
+      "Accept": "text/html,application/xhtml+xml",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Referer": "https://salus-it500.com/public/devices.php",
+      "Origin": "https://salus-it500.com",
       ...getCookieHeader(),
     },
   });
@@ -110,6 +124,10 @@ async function fetchControlPageWithToken(): Promise<string> {
     method: "GET",
     headers: {
       "User-Agent": "Mozilla/5.0",
+      "Accept": "text/html,application/xhtml+xml",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Referer": "https://salus-it500.com/public/devices.php",
+      "Origin": "https://salus-it500.com",
       ...getCookieHeader(),
     },
   });
@@ -172,8 +190,6 @@ function parseZones(html: string) {
 
 // ---------------- CONTROL (set.php) ----------------
 
-// ATENȚIE: valorile set_f sunt deduse din comportamentul tipic IT500.
-// Dacă Salus ignoră comenzile, aici vei ajusta mapping-ul.
 async function sendSetCommand(set_f: string, value: string): Promise<void> {
   await ensureLoggedInAndToken();
 
@@ -187,12 +203,15 @@ async function sendSetCommand(set_f: string, value: string): Promise<void> {
     headers: {
       "User-Agent": "Mozilla/5.0",
       "Content-Type": "application/x-www-form-urlencoded",
+      "Accept": "text/html,application/xhtml+xml",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Referer": "https://salus-it500.com/public/control.php",
+      "Origin": "https://salus-it500.com",
       ...getCookieHeader(),
     },
     body,
   });
 
-  // Salus de obicei nu dă JSON, doar 200 OK.
   if (!resp.ok) {
     const text = await resp.text();
     throw new Error(`set.php a răspuns cu status ${resp.status}: ${text}`);
@@ -201,11 +220,9 @@ async function sendSetCommand(set_f: string, value: string): Promise<void> {
 
 // ---------------- ROUTES ----------------
 
-// Login manual (opțional)
 app.post("/salus/login", async (req, res) => {
   try {
     await salusLogin();
-    // forțăm și token-ul să fie pregătit
     await ensureLoggedInAndToken();
     res.json({ status: "ok", message: "Logged in + token ready" });
   } catch (err: any) {
@@ -213,12 +230,10 @@ app.post("/salus/login", async (req, res) => {
   }
 });
 
-// Citire date (ambele zone)
 app.get("/salus/data", async (req, res) => {
   try {
     const debug = req.query.debug;
 
-    // debug=1 → devices.php brut
     if (debug === "1") {
       await ensureLoggedInAndToken();
       const resp = await fetch(`${API_PUBLIC}/devices.php`, {
@@ -232,13 +247,11 @@ app.get("/salus/data", async (req, res) => {
       return res.send(html);
     }
 
-    // debug=2 → control.php brut (cu token)
     if (debug === "2") {
       const html = await fetchControlPageWithToken();
       return res.send(html);
     }
 
-    // normal → JSON cu zone1 + zone2
     const html = await fetchControlPageWithToken();
     const zones = parseZones(html);
 
@@ -252,8 +265,6 @@ app.get("/salus/data", async (req, res) => {
   }
 });
 
-// Setare temperatură ZONA 1
-// body: { temp: number }
 app.post("/salus/set-temp", async (req, res) => {
   try {
     const { temp } = req.body as { temp?: number };
@@ -263,10 +274,7 @@ app.post("/salus/set-temp", async (req, res) => {
         .json({ status: "error", message: "temp trebuie să fie number" });
     }
 
-    // În UI, valorile sunt de forma 19.0, 21.5 etc.
-    const value = temp.toFixed(1); // ex: "21.0"
-
-    // set_f=2 → setare temperatură (dedus)
+    const value = temp.toFixed(1);
     await sendSetCommand("2", value);
 
     res.json({ status: "ok", message: "Temperatură setată", temp });
@@ -275,8 +283,6 @@ app.post("/salus/set-temp", async (req, res) => {
   }
 });
 
-// Setare mod ZONA 1 (AUTO / OFF)
-// body: { mode: "AUTO" | "OFF" }
 app.post("/salus/set-mode", async (req, res) => {
   try {
     const { mode } = req.body as { mode?: string };
@@ -287,13 +293,9 @@ app.post("/salus/set-mode", async (req, res) => {
       });
     }
 
-    // Aici mapping-ul depinde de implementarea Salus.
-    // Exemplu tipic:
-    // AUTO → "0", OFF → "1"
     const upper = mode.toUpperCase();
     const value = upper === "AUTO" ? "0" : "1";
 
-    // set_f=3 → setare mod (dedus)
     await sendSetCommand("3", value);
 
     res.json({ status: "ok", message: "Mod setat", mode: upper });
@@ -302,10 +304,8 @@ app.post("/salus/set-mode", async (req, res) => {
   }
 });
 
-// Shortcut OFF
 app.post("/salus/off", async (req, res) => {
   try {
-    // OFF → value "1" (dedus)
     await sendSetCommand("3", "1");
     res.json({ status: "ok", message: "Mod OFF setat" });
   } catch (err: any) {
@@ -313,10 +313,8 @@ app.post("/salus/off", async (req, res) => {
   }
 });
 
-// Shortcut AUTO
 app.post("/salus/auto", async (req, res) => {
   try {
-    // AUTO → value "0" (dedus)
     await sendSetCommand("3", "0");
     res.json({ status: "ok", message: "Mod AUTO setat" });
   } catch (err: any) {
