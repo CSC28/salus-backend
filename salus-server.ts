@@ -53,7 +53,7 @@ async function salusLogin(): Promise<void> {
   // 2. POST login.php → autentificare
   const body = new URLSearchParams();
   body.append("IDemail", SALUS_EMAIL);
-  body.append("password", SALUS_PASSWORD); // <-- AICI ERA PROBLEMA
+  body.append("password", SALUS_PASSWORD); // <-- corect
   body.append("login", "Login");
   body.append("keep_logged_in", "1");
 
@@ -73,7 +73,6 @@ async function salusLogin(): Promise<void> {
 
   const html = await loginResp.text();
 
-  // dacă tot pagina de login vine înapoi, înseamnă că nu te-a autentificat
   if (html.includes("IDemail") && html.includes("password")) {
     throw new Error("Login Salus eșuat — pagina de login a fost returnată din nou");
   }
@@ -137,41 +136,39 @@ async function fetchControlPageWithToken(): Promise<string> {
   return resp.text();
 }
 
-// ---------------- PARSER ----------------
+// ---------------- PARSER (REPARAT) ----------------
 
 function parseZones(html: string) {
   const $ = cheerio.load(html);
+  const raw = $("body").text().toUpperCase();
 
-  const z1TempText = $("#current_room_tempZ1").text().trim();
-  const z1SetpointText = $("#current_tempZ1").text().trim();
-  const z1Temp = z1TempText ? Number(z1TempText) : null;
-  const z1Setpoint = z1SetpointText ? Number(z1SetpointText) : null;
+  // ZONA 1
+  const z1Temp = Number($("#current_room_tempZ1").text().trim()) || null;
+  const z1Setpoint = Number($("#current_tempZ1").text().trim()) || null;
 
-  const z1ModeText = $(".heatingNote").first().text().trim().toUpperCase();
-  let z1Status: string | null = null;
-  let z1Mode: string | null = null;
+  const z1Status =
+    raw.includes("ZONE 1") && raw.includes("HEATING")
+      ? "HEATING"
+      : raw.includes("ZONE 1") && raw.includes("OFF")
+      ? "OFF"
+      : null;
 
-  if (z1ModeText.includes("HEATING")) z1Status = "HEATING";
-  if (z1ModeText.includes("OFF")) z1Status = "OFF";
-  if (z1ModeText.includes("AUTO")) z1Mode = "AUTO";
-  if (z1ModeText.includes("MANUAL")) z1Mode = "MANUAL";
+  const z1Mode = raw.includes("AUTO")
+    ? "AUTO"
+    : raw.includes("MANUAL")
+    ? "MANUAL"
+    : null;
 
-  const z2TempText = $("#current_room_tempZ2").text().trim();
-  const z2SetpointText = $("#current_tempZ2").text().trim();
-  const z2Temp = z2TempText ? Number(z2TempText) : null;
-  const z2Setpoint = z2SetpointText ? Number(z2SetpointText) : null;
+  // ZONA 2
+  const z2Temp = Number($("#current_room_tempZ2").text().trim()) || null;
+  const z2Setpoint = Number($("#current_tempZ2").text().trim()) || null;
 
-  const z2NoteText =
-    $(".heatingOffZ2").text().trim().toUpperCase() ||
-    $(".heatingNote")
-      .filter((_, el) => $(el).attr("class")?.includes("Z2"))
-      .text()
-      .trim()
-      .toUpperCase();
-
-  let z2Status: string | null = null;
-  if (z2NoteText.includes("HEATING")) z2Status = "HEATING";
-  if (z2NoteText.includes("OFF")) z2Status = "OFF";
+  const z2Status =
+    raw.includes("ZONE 2") && raw.includes("HEATING")
+      ? "HEATING"
+      : raw.includes("ZONE 2") && raw.includes("OFF")
+      ? "OFF"
+      : null;
 
   return {
     zone1: {
