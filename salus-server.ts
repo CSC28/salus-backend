@@ -21,8 +21,17 @@ async function salusLogin(): Promise<{ session: string; cookies: string }> {
   const loginPage = await fetch(`${API}/login.php`, {
     method: "GET",
     headers: {
-      "User-Agent": "Mozilla/5.0",
-      "Accept": "text/html",
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+      "Accept":
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Referer": "https://salus-it500.com/public/login.php",
+      "Upgrade-Insecure-Requests": "1",
+      "Sec-Fetch-Dest": "document",
+      "Sec-Fetch-Mode": "navigate",
+      "Sec-Fetch-Site": "same-origin",
+      "Sec-Fetch-User": "?1",
     },
   });
 
@@ -31,12 +40,17 @@ async function salusLogin(): Promise<{ session: string; cookies: string }> {
 
   const html = await loginPage.text();
 
-  // 🔥 LOG COMPLET AL PAGINII DE LOGIN — AICI VEDEM CE TRIMITE SALUS
   console.log("=== RAW LOGIN PAGE START ===");
   console.log(html);
   console.log("=== RAW LOGIN PAGE END ===");
 
-  // 2️⃣ Construim body-ul corect (fără token!)
+  if (!cookie.includes("PHPSESSID")) {
+    throw new Error(
+      "Serverul Salus NU a trimis cookie PHPSESSID — IP-ul Render este blocat sau lipsesc header-ele corecte"
+    );
+  }
+
+  // 2️⃣ Body corect (fără token)
   const body = new URLSearchParams();
   body.append("IDemail", SALUS_EMAIL);
   body.append("password", SALUS_PASSWORD);
@@ -49,7 +63,11 @@ async function salusLogin(): Promise<{ session: string; cookies: string }> {
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
       "Cookie": cookie,
-      "User-Agent": "Mozilla/5.0",
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+      "Accept": "*/*",
+      "Referer": "https://salus-it500.com/public/login.php",
+      "Origin": "https://salus-it500.com",
     },
     body,
     redirect: "manual",
@@ -58,7 +76,6 @@ async function salusLogin(): Promise<{ session: string; cookies: string }> {
   const cookies2 = loginRes.headers.get("set-cookie") || "";
   const finalCookie = cookies2.split(";")[0] || cookie;
 
-  // 4️⃣ Verificăm redirect-ul
   if (loginRes.status !== 302) {
     throw new Error("Login Salus nereușit (status != 302)");
   }
@@ -68,7 +85,6 @@ async function salusLogin(): Promise<{ session: string; cookies: string }> {
     throw new Error("Login Salus nereușit (redirect greșit)");
   }
 
-  // 5️⃣ Extragem sesiunea
   const sessionMatch = finalCookie.match(/PHPSESSID=([^;]+)/);
   if (!sessionMatch) {
     throw new Error("Nu am găsit sesiunea PHPSESSID");
@@ -86,7 +102,8 @@ async function salusGetData() {
   const res = await fetch(`${API}/getdata.php?session=${session}`, {
     headers: {
       "Cookie": cookies,
-      "User-Agent": "Mozilla/5.0",
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
     },
   });
 
@@ -127,7 +144,8 @@ app.post("/salus/settemp", async (req: Request, res: Response) => {
     await fetch(`${API}/settemp.php?session=${session}&temp=${temp}`, {
       headers: {
         "Cookie": cookies,
-        "User-Agent": "Mozilla/5.0",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
       },
     });
 
@@ -150,7 +168,8 @@ app.post("/salus/setmode", async (req: Request, res: Response) => {
     await fetch(`${API}/setmode.php?session=${session}&mode=${mode}`, {
       headers: {
         "Cookie": cookies,
-        "User-Agent": "Mozilla/5.0",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
       },
     });
 
