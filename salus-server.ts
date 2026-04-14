@@ -56,17 +56,6 @@ async function salusLogin() {
     return true;
 }
 
-// ---------------- DEVICE LIST ----------------
-
-async function getDeviceListHtml() {
-    const resp = await fetch(`${API}/devices.php`, {
-        method: "GET",
-        headers: { "User-Agent": "Mozilla/5.0", "Cookie": PHPSESSID }
-    });
-
-    return resp.text();
-}
-
 // ---------------- CONTROL PAGE ----------------
 
 async function getControlPageHtml() {
@@ -84,22 +73,22 @@ function parseControlPage(html: string) {
     const $ = cheerio.load(html);
 
     // temperatura actuală
-    const tempMatch = html.match(/CURRENT TEMPERATURE:\s*([\d.]+)°C/);
-    const temp = tempMatch ? Number(tempMatch[1]) : null;
+    const temp = Number($("#current_room_tempZ1").text().trim()) || null;
 
-    // setpoint (din tabel)
-    const setMatch = html.match(/\|\s*([\d.]+)°C/);
-    const setpoint = setMatch ? Number(setMatch[1]) : null;
+    // setpoint
+    const setpoint = Number($("#current_tempZ1").text().trim()) || null;
 
-    // modul
-    let mode = null;
-    if (html.includes("AUTO")) mode = "AUTO";
-    if (html.includes("OFF")) mode = "OFF";
+    // textul complet: "HEATING AUTO"
+    const modeText = $(".heatingNote").text().trim().toUpperCase();
 
-    // status
     let status = null;
-    if (html.includes("HEATING")) status = "HEATING";
-    if (html.includes("OFF")) status = "OFF";
+    let mode = null;
+
+    if (modeText.includes("HEATING")) status = "HEATING";
+    if (modeText.includes("OFF")) status = "OFF";
+
+    if (modeText.includes("AUTO")) mode = "AUTO";
+    if (modeText.includes("MANUAL")) mode = "MANUAL";
 
     return { temp, setpoint, mode, status };
 }
@@ -119,8 +108,11 @@ app.get("/salus/data", async (req, res) => {
     try {
         // DEBUG 1 → devices.php
         if (req.query.debug === "1") {
-            const html = await getDeviceListHtml();
-            return res.send(html);
+            const resp = await fetch(`${API}/devices.php`, {
+                method: "GET",
+                headers: { "User-Agent": "Mozilla/5.0", "Cookie": PHPSESSID }
+            });
+            return res.send(await resp.text());
         }
 
         // DEBUG 2 → control.php
