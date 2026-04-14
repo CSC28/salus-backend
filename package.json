@@ -1,18 +1,20 @@
 {
   "name": "salus-backend",
   "version": "1.0.0",
-  "main": "salus-server.ts",
+  "main": "dist/salus-server.js",
   "scripts": {
-    "start": "ts-node salus-server.ts"
+    "build": "tsc",
+    "start": "node dist/salus-server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^2.6.7",
+    "cheerio": "^1.0.0-rc.12"
   },
   "devDependencies": {
-    "ts-node": "^10.9.2",
     "typescript": "^5.3.3",
+    "ts-node": "^10.9.2",
     "@types/node": "^20.11.0",
     "@types/express": "^4.17.21",
     "@types/cors": "^2.8.17"
