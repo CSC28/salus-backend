@@ -5,7 +5,7 @@ import * as cheerio from "cheerio";
 
 const API = "https://salus-it500.com/public";
 
-// IMPORTANT: setează emailul și parola în Render → Environment Variables
+// Email și parolă din Render → Environment Variables
 const SALUS_EMAIL = process.env.SALUS_EMAIL || "";
 const SALUS_PASSWORD = process.env.SALUS_PASSWORD || "";
 
@@ -60,13 +60,9 @@ async function salusLogin() {
     return true;
 }
 
-// ---------------- GET DATA ----------------
+// ---------------- RAW HTML ----------------
 
-async function getSalusData() {
-    if (!PHPSESSID) {
-        throw new Error("Nu există sesiune activă — trebuie login");
-    }
-
+async function getSalusRawHtml() {
     const resp = await fetch(`${API}/devices.php`, {
         method: "GET",
         headers: {
@@ -75,11 +71,16 @@ async function getSalusData() {
         }
     });
 
-    const html = await resp.text();
-    const $ = cheerio.load(html);
+    return resp.text();
+}
 
+// ---------------- PARSER ----------------
+
+function parseSalusHtml(html: string) {
+    const $ = cheerio.load(html);
     const devices: any[] = [];
 
+    // Layout vechi (tabel)
     $("table.deviceTable tr").each((i, row) => {
         const cols = $(row).find("td");
         if (cols.length > 0) {
@@ -108,8 +109,15 @@ app.post("/salus/login", async (req, res) => {
 
 app.get("/salus/data", async (req, res) => {
     try {
-        const data = await getSalusData();
-        res.json({ status: "ok", data });
+        const html = await getSalusRawHtml();
+
+        // DEBUG MODE → returnăm HTML brut
+        if (req.query.debug === "1") {
+            return res.send(html);
+        }
+
+        const devices = parseSalusHtml(html);
+        res.json({ status: "ok", data: devices });
     } catch (err: any) {
         res.status(500).json({ status: "error", message: err.message });
     }
